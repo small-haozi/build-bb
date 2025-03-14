@@ -205,13 +205,13 @@ jobs:
         zip -r "$ZIP_FILE" $ARTIFACTS_LIST
 
         # 保存ZIP文件路径
-        echo "ZIP_FILE=frontend-build-$TIMESTAMP.zip" >> $GITHUB_ENV
+        echo "ZIP_FILE=tidal-build-$TIMESTAMP.zip" >> $GITHUB_ENV
 
     - name: 上传构建产物ZIP
       uses: actions/upload-artifact@v4
       with:
-        name: frontend-build
-        path: frontend-build-*.zip
+        name: tidal-build
+        path: tidal-build-*.zip
         if-no-files-found: error
 
     - name: 构建完成通知
