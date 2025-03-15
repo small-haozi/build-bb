@@ -1,4 +1,4 @@
-name: 清理历史工作流记录
+name: Clean
 
 on:
   schedule:
@@ -22,4 +22,5 @@ jobs:
           repository: ${{ github.repository }}
           retain_days: 3       # 保留最近3天的记录
           keep_minimum_runs: 3  # 每个工作流至少保留3条记录
-          delete_workflow_pattern: .* # 匹配所有工作流
+          delete_workflow_pattern: .*  # 匹配所有工作流
+          delete_run_by_conclusion_pattern: success,failure,cancelled,skipped  # 确保各种状态的运行记录都能被清理，包括手动触发的
