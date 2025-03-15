@@ -231,7 +231,8 @@ jobs:
       if: ${{ github.event.inputs.compress_artifacts != 'true' }}
       with:
         name: ${{ env.ARTIFACT_NAME }}
-        path: ${{ github.event.inputs.compress_artifacts != 'true' && cat(env.ARTIFACT_PATHS_FILE) || '' }}
+        path: |
+          ${{ env.ARTIFACT_PATHS_FILE }}
         if-no-files-found: error
 
     - name: 构建完成通知
