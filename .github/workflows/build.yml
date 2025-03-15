@@ -3,7 +3,7 @@ name: Build Web
 on:
   workflow_dispatch:
     inputs:
-      runs-on:
+      runs_on:
         description: '指定运行的操作系统环境'
         required: false
         default: 'ubuntu-latest'
@@ -39,7 +39,7 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ inputs.runs-on || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runs_on || 'ubuntu-latest' }}
 
     steps:
     - name: 检出构建工具仓库
