@@ -8,11 +8,16 @@ import { spawn } from 'child_process';
 
 // 获取命令参数
 const command = process.argv[2];
+// 获取工作目录参数
+const workingDir = process.argv[3] || process.cwd();
 
 if (!command) {
   console.error('错误: 未提供命令');
   process.exit(1);
 }
+
+console.log(`执行命令: ${command}`);
+console.log(`工作目录: ${workingDir}`);
 
 // 解析命令和参数
 const parts = command.split(' ');
@@ -56,7 +61,8 @@ console.log(`执行命令: ${command}`);
 const proc = spawn(cmd, args, {
   shell: true,
   stdio: ['pipe', 'pipe', 'pipe'],
-  env
+  env,
+  cwd: workingDir // 设置工作目录
 });
 
 // 命令输出缓冲区，用于检测跨多行的交互提示

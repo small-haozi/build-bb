@@ -149,6 +149,9 @@ jobs:
       run: |
         echo "执行构建命令..."
 
+        # 获取当前工作目录的绝对路径
+        CURRENT_DIR=$(pwd)
+
         # 将分号分隔的构建命令拆分为数组并逐个执行
         IFS=';' read -ra COMMANDS <<< "${{ github.event.inputs.build_command }}"
         for cmd in "${COMMANDS[@]}"; do
@@ -156,8 +159,8 @@ jobs:
           cmd=$(echo "$cmd" | xargs)
 
           echo "执行: $cmd"
-          # 使用 TypeScript 脚本处理可能的交互命令
-          bun $GITHUB_WORKSPACE/.github/workflows/run_interactive_command.ts "$cmd"
+          # 使用 TypeScript 脚本处理可能的交互命令，传递工作目录参数
+          cd $CURRENT_DIR && bun $GITHUB_WORKSPACE/.github/workflows/run_interactive_command.ts "$cmd" "$CURRENT_DIR"
 
           # 检查上一个命令的退出状态
           if [ $? -ne 0 ]; then
