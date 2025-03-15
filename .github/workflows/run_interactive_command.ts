@@ -36,24 +36,38 @@ const env = {
   BUN_CONFIG_YES: 'true'
 };
 
+// 标记是否正在响应交互，防止重复响应
+let isResponding = false;
+
 // 常见的需要交互响应的提示符及其回答
 const interactions = [
-  // 选择菜单类型的交互 - 针对特定UI格式的选择菜单，如Nuxt/Next.js更新提示等
+  // Nuxt/Next.js 特定的更新菜单
   {
-    prompt: /Ready to apply.*\?.*● Yes|○ No|◆.*Yes.*No/s,
-    response: '\n'  // 直接回车确认默认选项
+    prompt: /Ready to apply the static updates to your app\?[\s\S]*● Yes[\s\S]*○ Nope/im,
+    response: '\n',  // 确认已选中的Yes选项
+    description: "Nuxt/Next.js更新确认"
+  },
+
+  // 通用选择菜单模式，但匹配优先级较低
+  {
+    prompt: /[◆│].*\n.*● .*\n.*○ .*\n.*[└]/s,
+    response: '\n',  // 对于已选择的选项直接回车
+    description: "已选择选项的菜单"
   },
   {
-    prompt: /● .*\n.*○ .*\n.*└/s,
-    response: '\n'  // 针对已选择项为●的菜单直接按回车
+    prompt: /[◆│].*\n.*○ .*\n.*● .*\n.*[└]/s,
+    response: ' \n',  // 先空格切换选择，再回车
+    description: "未选择选项的菜单"
   },
+
+  // 确认类型的交互，优先级较低
   {
-    prompt: /○ .*\n.*● .*\n.*└/s,
-    response: ' \n'  // 先发送空格切换选择，再按回车
+    prompt: /(?:y\/n|y\/N|Y\/n|yes\/no)/i,
+    response: 'y\n',
+    description: "是/否确认提示"
   },
 
   // 确认类型的交互
-  { prompt: /(?:y\/n|y\/N|Y\/n|yes\/no)/i, response: 'y\n' },
   { prompt: /(?:proceed|continue|confirm)\?/i, response: 'y\n' },
   { prompt: /(?:do you want to|would you like to|are you sure)/i, response: 'y\n' },
   { prompt: /(?:overwrite|already exists)/i, response: 'y\n' },
@@ -114,19 +128,36 @@ proc.stderr.on('data', (data) => {
 
 // 检查提示并响应
 function checkForPrompts() {
+  if (isResponding) return; // 防止重复响应
+
   for (const interaction of interactions) {
     if (interaction.prompt.test(outputBuffer)) {
-      console.log(`检测到交互提示，将自动响应...`);
+      isResponding = true;
+
+      console.log(`检测到交互提示类型: ${interaction.description || '未命名'}`);
+
+      // 为了调试，显示匹配到的内容（但隐藏敏感信息）
+      const matchedText = outputBuffer.match(interaction.prompt)?.[0] || '';
+      if (matchedText) {
+        console.log(`匹配内容: ${matchedText.length > 100 ?
+          matchedText.substring(0, 50) + '...' + matchedText.substring(matchedText.length - 50) :
+          matchedText}`);
+      }
+
       // 添加延迟以确保命令行界面已完全渲染
+      console.log(`将在500ms后发送响应: ${JSON.stringify(interaction.response)}`);
       setTimeout(() => {
-        // 对于多步响应（如先空格后回车），分开发送
-        const responses = interaction.response.split('');
-        for (const char of responses) {
-          proc.stdin.write(char);
-        }
-        console.log(`已发送响应: ${interaction.response.replace('\n', '\\n')}`);
+        // 发送响应
+        proc.stdin.write(interaction.response);
+        console.log(`已发送响应，长度: ${interaction.response.length}`);
+
+        // 2秒后重置响应状态
+        setTimeout(() => {
+          isResponding = false;
+          outputBuffer = ''; // 清空缓冲区
+        }, 2000);
       }, 500);
-      outputBuffer = '';
+
       break;
     }
   }
