@@ -18,8 +18,8 @@ jobs:
       - name: 清理Actions运行记录
         uses: Mattraks/delete-workflow-runs@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_TOKEN }}
           repository: ${{ github.repository }}
-          retain_days: 7        # 保留最近7天的记录
+          retain_days: 3       # 保留最近3天的记录
           keep_minimum_runs: 3  # 每个工作流至少保留3条记录
           delete_workflow_pattern: .* # 匹配所有工作流
