@@ -188,9 +188,9 @@ jobs:
           fi
         done
 
-        # 用当前日期时间创建唯一的ZIP文件名
+        # 用当前日期时间创建唯一的时间戳
         TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-        ZIP_FILE="../frontend-build-$TIMESTAMP.zip"
+        ZIP_FILE="build-$TIMESTAMP.zip"
 
         if [[ "${{ github.event.inputs.compress_artifacts }}" == "true" ]]; then
           echo "将以下路径打包到 $ZIP_FILE: $ARTIFACTS_LIST"
@@ -198,24 +198,22 @@ jobs:
           zip -r "$ZIP_FILE" $ARTIFACTS_LIST
 
           # 保存ZIP文件路径和名称用于后续上传
-          echo "ARTIFACT_PATH=../frontend-build-$TIMESTAMP.zip" >> $GITHUB_ENV
-          echo "ARTIFACT_NAME=frontend-build" >> $GITHUB_ENV
+          echo "ARTIFACT_PATH=$ZIP_FILE" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=build-$TIMESTAMP" >> $GITHUB_ENV
         else
-          # 不压缩时，为上传准备多行路径格式
+          # 不压缩时，要正确处理多个路径
           echo "不压缩，使用原始路径上传构建产物"
-          echo "ARTIFACT_NAME=frontend-build-files" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=build-$TIMESTAMP" >> $GITHUB_ENV
 
-          # 创建包含所有路径的临时文件
-          PATHS_FILE=$(mktemp)
-          IFS=',' read -ra PATHS <<< "${{ github.event.inputs.artifact_paths }}"
+          # 使用GitHub Actions的多行语法正确处理多个路径
+          echo "ARTIFACT_PATHS<<EOF" >> $GITHUB_ENV
           for PATH_ITEM in "${PATHS[@]}"; do
             # 删除可能的前后空格
             PATH_ITEM=$(echo "$PATH_ITEM" | xargs)
-            echo "target-project/$PATH_ITEM" >> $PATHS_FILE
+            # 添加到环境变量中，每个路径一行
+            echo "$PATH_ITEM" >> $GITHUB_ENV
           done
-
-          # 保存路径文件位置到环境变量
-          echo "ARTIFACT_PATHS_FILE=$PATHS_FILE" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
         fi
 
     - name: 上传构建产物
@@ -232,7 +230,8 @@ jobs:
       with:
         name: ${{ env.ARTIFACT_NAME }}
         path: |
-          ${{ env.ARTIFACT_PATHS_FILE }}
+          ${{ env.ARTIFACT_PATHS }}
+        path-pattern: "target-project/{0}"
         if-no-files-found: error
 
     - name: 构建完成通知
@@ -243,4 +242,3 @@ jobs:
           echo "构建产物已压缩为ZIP文件"
         else
           echo "构建产物以原始目录结构上传"
-        fi
