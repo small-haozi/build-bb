@@ -1,0 +1,25 @@
+name: 清理历史工作流记录
+
+on:
+  schedule:
+    # 每72小时运行一次
+    - cron: '0 */72 * * *'
+  workflow_dispatch:  # 也允许手动触发
+
+# 设置必要的权限
+permissions:
+  actions: write  # 对actions的写入权限，用于删除工作流运行记录
+  contents: read  # 对仓库内容的读取权限
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 清理Actions运行记录
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: 7        # 保留最近7天的记录
+          keep_minimum_runs: 3  # 每个工作流至少保留3条记录
+          delete_workflow_pattern: .* # 匹配所有工作流

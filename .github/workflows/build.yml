@@ -1,8 +1,12 @@
-name: Frontend Build CI with Bun
+name: Build Web
 
 on:
   workflow_dispatch:
     inputs:
+      runs-on:
+        description: '指定运行的操作系统环境'
+        required: false
+        default: 'ubuntu-latest'
       username:
         description: 'GitHub用户名或组织名'
         required: true
@@ -21,6 +25,10 @@ on:
         description: '构建产物路径(多个路径用逗号分隔)'
         required: true
         default: 'dist'
+      compress_artifacts:
+        description: '是否压缩构建产物'
+        required: false
+        default: 'false'
       env_vars:
         description: '构建环境变量（已加密或格式：KEY1=VALUE1,KEY2=VALUE2）'
         required: false
@@ -28,27 +36,14 @@ on:
         description: '环境变量是否已加密'
         required: false
         default: 'false'
-      bun_version:
-        description: 'Bun版本'
-        required: false
-        default: 'latest'
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on || 'ubuntu-latest' }}
 
     steps:
     - name: 检出构建工具仓库
       uses: actions/checkout@v3
-
-    - name: 安装必要工具
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y expect
-
-    - name: 设置脚本权限
-      run: |
-        chmod +x .github/workflows/run_interactive_command.sh
 
     - name: 克隆目标项目
       run: |
@@ -75,10 +70,16 @@ jobs:
     - name: 安装Bun
       uses: oven-sh/setup-bun@v1
       with:
-        bun-version: ${{ github.event.inputs.bun_version }}
+        bun-version: latest
 
     - name: 显示Bun版本
       run: bun --version
+
+    - name: 安装工作流依赖
+      run: |
+        echo "安装工作流所需的依赖包..."
+        # 安装运行脚本和解密环境变量所需的依赖
+        bun add crypto child_process
 
     - name: 安装依赖
       working-directory: target-project
@@ -124,15 +125,6 @@ jobs:
       run: |
         echo "解密环境变量..."
 
-        # 安装 crypto 包供解密脚本使用（保持在当前工作目录）
-        # 记住当前目录
-        CURRENT_DIR=$(pwd)
-
-        # 在主仓库安装依赖，但不切换工作目录
-        pushd $GITHUB_WORKSPACE > /dev/null
-        bun add crypto
-        popd > /dev/null
-
         # 创建环境变量文件
         ENV_FILE=".env"
         TEMP_ENV_FILE=$(mktemp)
@@ -164,8 +156,8 @@ jobs:
           cmd=$(echo "$cmd" | xargs)
 
           echo "执行: $cmd"
-          # 使用脚本处理可能的交互命令
-          $GITHUB_WORKSPACE/.github/workflows/run_interactive_command.sh "$cmd"
+          # 使用 TypeScript 脚本处理可能的交互命令
+          bun $GITHUB_WORKSPACE/.github/workflows/run_interactive_command.ts "$cmd"
 
           # 检查上一个命令的退出状态
           if [ $? -ne 0 ]; then
@@ -175,10 +167,10 @@ jobs:
         done
         echo "所有构建命令已成功执行"
 
-    - name: 打包构建产物为ZIP
+    - name: 处理构建产物
       working-directory: target-project
       run: |
-        echo "打包构建产物为ZIP..."
+        echo "处理构建产物..."
         # 安装zip命令行工具
         sudo apt-get update && sudo apt-get install -y zip
 
@@ -200,41 +192,54 @@ jobs:
         TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
         ZIP_FILE="../frontend-build-$TIMESTAMP.zip"
 
-        echo "将以下路径打包到 $ZIP_FILE: $ARTIFACTS_LIST"
-        # 使用zip命令打包，-r 递归处理目录，保留目录结构
-        zip -r "$ZIP_FILE" $ARTIFACTS_LIST
+        if [[ "${{ github.event.inputs.compress_artifacts }}" == "true" ]]; then
+          echo "将以下路径打包到 $ZIP_FILE: $ARTIFACTS_LIST"
+          # 使用zip命令打包，-r 递归处理目录，保留目录结构
+          zip -r "$ZIP_FILE" $ARTIFACTS_LIST
 
-        # 保存ZIP文件路径
-        echo "ZIP_FILE=frontend-build-$TIMESTAMP.zip" >> $GITHUB_ENV
+          # 保存ZIP文件路径和名称用于后续上传
+          echo "ARTIFACT_PATH=../frontend-build-$TIMESTAMP.zip" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=frontend-build" >> $GITHUB_ENV
+        else
+          # 不压缩时，为上传准备多行路径格式
+          echo "不压缩，使用原始路径上传构建产物"
+          echo "ARTIFACT_NAME=frontend-build-files" >> $GITHUB_ENV
 
-    - name: 上传构建产物ZIP
+          # 创建包含所有路径的临时文件
+          PATHS_FILE=$(mktemp)
+          IFS=',' read -ra PATHS <<< "${{ github.event.inputs.artifact_paths }}"
+          for PATH_ITEM in "${PATHS[@]}"; do
+            # 删除可能的前后空格
+            PATH_ITEM=$(echo "$PATH_ITEM" | xargs)
+            echo "target-project/$PATH_ITEM" >> $PATHS_FILE
+          done
+
+          # 保存路径文件位置到环境变量
+          echo "ARTIFACT_PATHS_FILE=$PATHS_FILE" >> $GITHUB_ENV
+        fi
+
+    - name: 上传构建产物
       uses: actions/upload-artifact@v4
+      if: ${{ github.event.inputs.compress_artifacts == 'true' }}
       with:
-        name: frontend-build
-        path: frontend-build-*.zip
+        name: ${{ env.ARTIFACT_NAME }}
+        path: target-project/${{ env.ARTIFACT_PATH }}
+        if-no-files-found: error
+
+    - name: 上传未压缩构建产物
+      uses: actions/upload-artifact@v4
+      if: ${{ github.event.inputs.compress_artifacts != 'true' }}
+      with:
+        name: ${{ env.ARTIFACT_NAME }}
+        path: ${{ github.event.inputs.compress_artifacts != 'true' && cat(env.ARTIFACT_PATHS_FILE) || '' }}
         if-no-files-found: error
 
     - name: 构建完成通知
       run: |
-        echo "前端项目构建已完成"
-        echo "构建产物路径: ${{ github.event.inputs.artifact_paths }}"
-        echo "构建产物已打包为: ${{ env.ZIP_FILE }}"
         echo "您可以在GitHub Actions运行页面的'Artifacts'部分下载构建产物"
-        echo "或者使用以下命令通过GitHub CLI下载："
-        echo "gh run download <workflow-run-id> -n frontend-build"
-        echo "或者使用以下API下载："
-        echo "curl -L \\"
-        echo "  -H \"Accept: application/vnd.github+json\" \\"
-        echo "  -H \"Authorization: Bearer <YOUR-TOKEN>\" \\"
-        echo "  -H \"X-GitHub-Api-Version: 2022-11-28\" \\"
-        echo "  https://api.github.com/repos/${{ github.repository }}/actions/artifacts/<artifact-id>/zip \\"
-        echo "  -o frontend-build.zip"
-
-    - name: 清理Actions运行记录
-      if: env.CLEAN_HISTORY == 'true'
-      uses: Mattraks/delete-workflow-runs@v2
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        repository: ${{ github.repository }}
-        retain_days: 1
-        keep_minimum_runs: 1
+        echo "构建产物路径: ${{ github.event.inputs.artifact_paths }}"
+        if [[ "${{ github.event.inputs.compress_artifacts }}" == "true" ]]; then
+          echo "构建产物已压缩为ZIP文件"
+        else
+          echo "构建产物以原始目录结构上传"
+        fi
