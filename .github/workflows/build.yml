@@ -79,7 +79,7 @@ jobs:
       run: |
         echo "安装工作流所需的依赖包..."
         # 安装运行脚本和解密环境变量所需的依赖
-        bun add crypto child_process
+        bun add crypto-js child_process
 
     - name: 安装依赖
       working-directory: target-project
